@@ -1,0 +1,593 @@
+---
+title: "ISE-201: Evaluation of Financial Value of a Bachelor's Degree"
+author: "Apoorva Adimulam"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Earning a bachelor's degree is a significant commitment, requiring 3-4 years of focused learning in a specific field. For many, securing a job afterward is the ultimate goal. However, before considering to enroll in a bachelors program, certain questions are bound to pass one's mind.
+
+1.  Do these jobs offer a return on the investment made in education?
+2.  Can a degree guarantee financial success?
+3.  Which fields tend to be more economically rewarding?
+4.  Moreover, are these high-paying jobs truly dependent on having a college degree?\
+5.  Additionally, what is the gender distribution in the bachelors program and top-earning positions?
+6.  How do high-paying jobs compare to lower-paying roles within the same industry?
+
+It is essential to analyze data and gain insights to make an informed decision regarding college education, considering the significant time and money involved. With this project, I aim to explore the impact of college education on financial success.
+
+## Data
+
+### Data Source
+
+This dataset is from FiveThirtyEight datasets in Github.
+
+FiveThirtyEight. (2014). College Majors. GitHub.\
+<a href="https://github.com/fivethirtyeight/data/tree/master/college-majors" title="Title Text">CollegeMajorsData</a>
+
+### Data collection
+
+The data comes from American Community Survey 2010-2012 Public Use Microdata Series. It was gathered to gain insight on the importance of college education and its influence on the financial outcomes, focusing on factors like the employment rate and earnings after graduating from each major. The cases present in this dataset are purely from an observational study as it is solely based on the survey conducted for graduates from different majors. There were no assumptions or manipulation of data from the researchers while compiling this dataset.
+
+### Unit of observation
+
+This dataset has a total of 173 observations where each observation captures information on the number of graduates, employment rate and pay scale for graduates coming out of different majors.
+
+### Variables
+
+The dataset consists of 21 variables. Below is a brief description of each of the variable.
+
+```{r variableDescription}
+data <- data.frame(
+  Variable = c("Rank", "Major_code", "Major", "Total",	"Men",	"Women",	"Major_category",	"ShareWomen",	"Sample_size",	"Employed",	"Full_time",	"Part_time",	"Full_time_year_round",	"Unemployed",	"Unemployment_rate",	"Median",	"P25th",	"P75th",	"College_jobs",	"Non_college_jobs", "Low_wage_jobs"),
+
+  Description = c("Rank based on median earnings", 
+                  "Major Code",
+                  "Major Name",
+                  "Total number of graduates in the major",
+                  "Male graduates",
+                  "Female graduates",
+                  "Category of Major",
+                  "Women as share of total",
+                  "Sample size for the survey conducted",
+                  "Number of employed graduates",
+                  "Number of graduates with full time role (>35 hours)",
+                  "Number of graduates with part time role (<35 hours)", 
+                  "Number of graduates that were employed for atleast 50 weeks in a year and atleast 35 working hours in a week",
+                  "Number of graduates that were unemployed",
+                  "Rate of unemployment for the major",
+                  "Median earnings after graduation",
+                  "25th percentile earnings after graduation",
+                  "75th percentile earnings after graduation",
+                  "Number of jobs under the major that require college degree",
+                  "Number of jobs under this major that do not require a college degree",
+                  "Number of graduates in low wage service jobs"
+                  )
+)
+
+# Display table
+knitr::kable(data, caption = "Variables and their Description in College Majors Dataset")
+```
+
+A subset of the variables available in this dataset would be used for analysis. Below variables are of key relevance to the questions posed in this study:
+
+1.  Major_category
+2.  ShareWomen
+3.  Unemployment_rate
+4.  Median
+5.  P25th
+6.  P75th
+7.  College_jobs
+8.  Non_college_jobs
+
+Major_code is a variable that has no significant relevancy to the analysis conducted and hence will be removed from the study under the Data Cleanup section.
+
+### Data Cleanup
+
+This section checks for data quality issues, missing data, duplicates, format issues etc. and the necessary data quality improvements are performed.
+
+#### Including Libraries
+
+```{r library, echo =FALSE}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+```
+
+#### Import Dataset
+
+```{r importData}
+indata <- read.csv("recent-grads.csv")
+```
+
+```{r importedDataVerification}
+dim(indata)
+head(indata)
+```
+
+The data from the csv file is read successfully and all the 173 observations across 21 features are captured.
+
+#### Dataset Formatting
+
+```{r checkDataFrame}
+is.data.frame(indata)
+```
+
+Since the data is currently stored as data frame, let's convert it to a tibble for ease of use with tidyverse library.
+
+```{r convert&verifyTibble}
+indata <- as_tibble(indata)
+is_tibble(indata)
+```
+
+#### Missing Values Check
+
+```{r Summary}
+summary(indata)
+```
+
+From the above summary, it is observed that the dataset has one missing value in Total, Men and Women features. These missing values can be filled up to avoid loss of data. The missing values can be filled in with the average values of the major category that it belongs to.
+
+```{r fillMissingValues}
+
+indata_cleaned <- indata %>%group_by(Major_category) %>%
+  mutate(
+    mean_total = round(mean(Total, na.rm = TRUE)),
+    mean_men = round(mean(Men, na.rm = TRUE)),
+    mean_women = round(mean(Women, na.rm = TRUE)),
+    mean_womenshare = mean(Women, na.rm = TRUE)/mean(Total, na.rm = TRUE)
+  ) %>%
+  mutate(
+    Total = case_when(
+      is.na(Total) ~ mean_total,  
+      TRUE ~ Total),
+    Men = case_when(
+      is.na(Men) ~ mean_men,                         
+      TRUE ~ Men ),
+    Women = case_when(
+      is.na(Women) ~ mean_women,                    
+      TRUE ~ Women),
+    ShareWomen = case_when(
+      is.na(ShareWomen) ~ mean_womenshare,                    
+      TRUE ~ ShareWomen),
+  ) %>%
+  select(-mean_total, -mean_men, -mean_women) %>%  ungroup()
+
+summary(indata_cleaned)
+
+```
+
+As observed above, the missing values are filled successfully.
+
+#### Remove Extra Columns
+
+Since, Major_code is irrelevant to our data analysis, the column can be removed from the dataset.
+
+```{r RemoveColumn}
+indata_cleaned <- select(indata_cleaned, -(Major_code))
+head(indata_cleaned)
+```
+
+#### Remove Duplicate Occurences
+
+```{r RemoveDuplicates}
+duplicates_summary <- indata_cleaned %>%
+  group_by(Major) %>%
+  summarize(count = n()) %>%
+  filter(count > 1)
+
+print(duplicates_summary)
+```
+
+Since there are no duplicates of Majors in the dataset, no updates are required to be made to the dataset.
+
+#### Assess Outliers
+
+##### Median Salary
+
+```{r MedianBoxPlot}
+boxplot(indata_cleaned$Median,
+        main = "Box Plot of Median Salary by Major",  
+        xlab = "Median Salary (USD)",                  
+        col = "lightblue",                             
+        border = "darkblue",                         
+        horizontal = TRUE)                       
+grid()
+```
+
+```{r MedianOutliers}
+median_outliers <- boxplot.stats(indata_cleaned$Median)$out
+
+median_outlier_majors <- indata_cleaned[indata_cleaned$Median %in% median_outliers, c("Major", "Median")]
+
+median_outlier_majors
+```
+
+The observed outliers for the Median Salary have majors that are reputed to high-paying jobs. Hence, it can assumed that the data is accurate. Since, the intention of this analysis to evaluate the true variation in salaries across all majors, the data of these outliers will be retained in the dataset.
+
+##### Unemployment Rate
+
+```{r UnemploymentBoxPlot}
+boxplot(indata_cleaned$Unemployment_rate,
+        main = "Box Plot of Unemployment Rate by Major",  
+        xlab = "Unemployment Rate",                  
+        col = "lightblue",                             
+        border = "darkblue",                           
+        horizontal = TRUE)                             
+grid()                                              
+```
+
+```{r UnemploymentOutliers}
+unemployment_outliers <- boxplot.stats(indata_cleaned$Unemployment_rate)$out
+
+unemployment_outlier_majors <- indata_cleaned[indata_cleaned$Unemployment_rate %in% unemployment_outliers, c("Major", "Unemployment_rate")]
+
+unemployment_outlier_majors
+```
+
+Nuclear Engineering and Public Administration are fields that have fewer job opportunities and this data reflects the same. Computer Networking and Clinical Psychology are majors that are heavily pursued but with limited opportunities, hence bringing about a higher rate of unemployment. Hence, these outliers are justified and shall be retained in the dataset.
+
+## Exploratory Data Analysis
+
+### Pay Scale Evaluation of jobs after graduation
+
+In this section, we observe the mean salary of students after graduation in different fields.
+
+```{r MeanSalary}
+category_mean_salary <- indata_cleaned %>%
+  group_by(Major_category) %>%
+  summarize(mean_salary = mean(Median, na.rm = TRUE))
+
+ggplot(category_mean_salary, aes(x = reorder(Major_category, mean_salary), y = mean_salary)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +  
+  labs(title = "Mean of Salary by Major Category",
+       x = "Major Category",
+       y = "Mean Median Salary") +
+  theme_minimal()    
+
+```
+
+```{r MedianSalaryQ1Q3}
+box_stats <- boxplot.stats(category_mean_salary$mean_salary)
+
+q1_val <- box_stats$stats[2]   
+q3_val <- box_stats$stats[4]   
+print(paste("The Q1 value of mean salary (USD) in each field is:", q1_val))
+print(paste("The Q3 value of mean salary (USD) in each field is:", q3_val))
+
+lower_paying_majors <- category_mean_salary[category_mean_salary$mean_salary <= q1_val, c("Major_category", "mean_salary")]
+higher_paying_majors <- category_mean_salary[category_mean_salary$mean_salary >= q3_val, c("Major_category", "mean_salary")]
+```
+
+Fields with mean salary lower than the first quartile (Q1):
+
+```{r MedianSalaryLessThanQ1}
+print(lower_paying_majors)
+```
+
+Fields with mean salary greater than the third quartile (Q3):
+
+```{r MedianSalaryHigherThanQ3}
+print(higher_paying_majors)
+```
+
+It is observed here that Major Categories - Arts, Education, Humanities & Liberal Arts and Psychology & Social Work are the lower paying majors while Business, Computer & Mathematics, Engineering and Law & Public Policy are majors that have higher graduate salary than the rest of the majors.
+
+### Relevance of Bachelors Degree for jobs after graduation
+
+In this section, we compare the quantity of jobs that require a bachelors degree with the quantity of jobs that do not. This analysis will give us insight into the relevance that Bachelors degree holds in employment.
+
+```{r jobDistribution}
+
+job_distribution <- indata_cleaned %>%
+  group_by(Major_category) %>%
+  summarize(tot_college_jobs = sum(College_jobs, na.rm = TRUE), tot_non_college_jobs = sum(Non_college_jobs, na.rm = TRUE))
+
+job_distribution_long <- job_distribution %>%pivot_longer(cols = c(tot_college_jobs, tot_non_college_jobs), 
+               names_to = "Job_Type", 
+               values_to = "Job_Count")
+
+ggplot(job_distribution_long, aes(x = Major_category, y = Job_Count, fill = Job_Type)) +
+  geom_bar(stat = "identity") +
+  labs(title = "College vs. Non-College Jobs by Major Category",
+       x = "Major Category",
+       y = "Job Count",
+       fill = "Job Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+There is a clear indicator that in fields like Arts, Business, Humanities& Liberal Arts, Communications & Journalism, the jobs that do not require a Bachelors degree is distinctly higher than the ones that do.
+
+Below is a similar distribution of jobs for fields that have been previously identified to provide higher paying job opportunites after graduation.
+
+```{r HigherSalaryJobDistribution}
+job_distribution_high_salary_long <- job_distribution_long[job_distribution_long$Major_category %in% higher_paying_majors$Major_category, c("Major_category", "Job_Type", "Job_Count")]
+
+ggplot(job_distribution_high_salary_long, aes(x = Major_category, y = Job_Count, fill = Job_Type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Comparison of College vs. Non-College Jobs in Selected Major Categories",
+       x = "Major Category",
+       y = "Job Count",
+       fill = "Job Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+In the above plot, we see that in Business, and Law & Public Policy, non-college jobs are higher. However, in Engineering and Computer & Mathematics, we observe that more jobs demand for bachelor's degree.
+
+### Pay Scale Range within Fields
+
+Here, we look at the distribution (Q1 and Q3 values of salaries) of Pay Scale within each of the fields.
+
+```{r jobPayScale}
+
+job_pay <- indata_cleaned %>%
+  group_by(Major_category) %>%
+  summarize(lower_pay_mean = mean(P25th, na.rm = TRUE), higher_pay_mean = mean(P75th, na.rm = TRUE))
+
+salary_data <- indata_cleaned %>% 
+  select(Major_category, Median, P25th, P75th)
+
+salary_data_violin <- salary_data %>%
+  group_by(Major_category) %>%
+  filter(n() >= 2)
+
+ggplot(salary_data_violin, aes(x = Major_category, y = Median, fill = Major_category)) +
+  geom_violin(trim = FALSE, drop = FALSE) +
+  geom_boxplot(width = 0.1, outlier.shape = NA, color = "black") + 
+  stat_summary(fun = median, geom = "point", shape = 23, size = 3, color = "white", fill = "black") + 
+  geom_point(aes(y = P25th), shape = 21, size = 2, color = "blue", fill = "blue") +  
+  geom_point(aes(y = P75th), shape = 21, size = 2, color = "red", fill = "red") +  
+  labs(title = "Distribution of Median Salaries by Major Category with 25th and 75th Percentiles",
+       x = "Field",
+       y = "Salary",
+       fill = "Major Category") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),legend.position = "none")
+        
+```
+
+As depicted in the above plot, red dots correspond to the third quartile salary for graduates from majors belonging to the field. Blue dots in the plot represent the first quartile salary for graduates from majors of a field. black dots are the median salary points for each major category, visually emphasizing the central tendency within each distribution.
+
+It is clear from the plot that engineering field offers higher pay scale than rest of the fields.
+
+### Employment Rate
+
+In this section, we plot the employment rate in each field.
+
+```{r employmentRate}
+employmentData <- indata_cleaned %>%
+mutate(employment_rate = 1 - Unemployment_rate)
+
+head(employmentData$employment_rate)
+
+employmentData <- employmentData %>%
+  group_by(Major_category) %>%
+  summarize(employment_rate_mean = mean(employment_rate, na.rm = TRUE))
+
+ggplot(employmentData, aes(x = Major_category, y = employment_rate_mean, fill = Major_category)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Employment Rate by Major Category",
+       x = "Field",
+       y = "Employment Rate")  +  
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),  
+        legend.position = "none")
+```
+
+```{r LeastEmploymentRate}
+least_employment_categories <- employmentData %>%
+  arrange(employment_rate_mean) %>% 
+  slice_head(n = 5)  
+
+print(least_employment_categories)
+```
+
+While most of the majors seem to have good overall employment rate, the fields with the least employment rate are shown above.
+
+### Female Population in Majors
+
+Below plot shows the proportion of females in the major fields. It is observed that in fields like Psychology & Social Work, Health etc have \>75% population to be females while fields like Engineering, Industrial Arts & Consumer Services have significantly lesser female population.
+
+```{r genderDistributionDegrees}
+
+category_summary <- indata_cleaned %>%
+  group_by(Major_category) %>%
+  summarize(median_share_women = median(ShareWomen, na.rm = TRUE))
+
+# Bar chart to visualize the median share of women in each major category
+ggplot(category_summary, aes(x = reorder(Major_category, median_share_women), y = median_share_women, fill = median_share_women)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Proportion of Female Graduates of Bachelor's Degree",
+       x = "Major Category",
+       y = "Median Share of Women") +
+  scale_y_continuous(labels = scales::percent) + 
+  coord_flip() +  
+  theme_minimal() +
+  theme(legend.position = "none",  # Remove legend
+        axis.text.y = element_text(size = 8))
+
+```
+
+## Inferences
+
+### 1. Employment Outcomes by Degree Major Type - Hypothesis Testing
+
+#### Null Hypothesis ($H_0$) :
+
+The mean employment rate is independent on the major category.
+
+#### Alternative Hypothesis ($H_1$):
+
+The mean employment rate is dependent on the major category.
+
+#### Test Type:
+
+One-way ANOVA (Analysis of Variance) can be used to assess the dependency of employment rate across different major categories.
+
+#### Test Statistic:
+
+In this hypothesis testing, F-statistic is used as the test statistic. F-statistic is appropriate here because it captures the variance of the mean employment rate amongst the major categories and within the major categories too.
+
+#### Reference Distribution:
+
+The reference distribution for F-statistic in ANOVA testing is F-distribution characterized by two degrees and denoted as F($df_1$, $df_2$). The degrees of freedom are calculated as below:
+
+1.  $df_1$: This value captures the degrees of freedom between the major categories.\
+    $df_1$ = k-1,\
+    where k = number of unique major categories.\
+    In this scenario, the value of $df_1$ = 16-1 = 15
+
+2.  $df_2$: This value captures the degrees of freedom within the major categories.\
+    $df_2$ = N-k,\
+    where k = number of unique major categories\
+    and N = Total number of observations.\
+    In this scenario, the value of df2 = 173-16 = 157
+
+Hence, the reference distribution for the F-statistic is F-distribution with F(15,157).
+
+#### Rejection Criteria:
+
+The criteria to reject the null hypothesis is if p-value of ANOVA test is less than the significance level α. Here, we set the significance value α = 0.05, meaning we are willing to accept a 5% chance of concluding that the mean employment rate differs by major category when it actually does not.
+
+#### ANOVA Test:
+
+```{r ANOVA_Test1}
+
+test1_data <- indata_cleaned %>% mutate(Employment_Rate = 1-Unemployment_rate)
+anova_result <- aov(Employment_Rate ~ Major_category, data = test1_data)
+
+# Display ANOVA summary
+summary(anova_result)
+```
+
+#### Conclusion:
+
+The F value is 2.842. A higher F-statistic indicates that the between-group variance is large relative to the within-group variance, which suggests that the differences between groups are not due to random chance. Since the p-value (0.000591) is well below 0.05, we reject the null hypothesis.
+
+There is statistically significant evidence that the mean employment rate differs by major category. In other words, **at least one major category has a mean employment rate that is significantly different from others**. \*\*
+
+
+### 2. Identify factors influencing Median Salary - PCA & Linear Regression
+
+In this section, Principal Component Analysisa and Linear Regression are performed to reduce the dimensionality of the data and to identify factors that influence the Median salary of a college graduate.
+
+#### Data Pre-processing
+
+Data pre-processing must be completed before moving on with PCA. First, columns unrelated to the analysis, such as Major and Sample_size, are eliminated. A few columns contain information that is already recorded in another column. For example, the values in P25th and P75th are not needed since the dataset already contains the median income, and the columns Men and Women are not needed because the dataset already contains the Total and WomenShare columns. We minimise the dataset to contain just non-redundant information by eliminating these unnecessary columns.  
+Ensuring the data is entirely numerical would be the next stage. One of the column - Major_Category is crucial to the analysis and is not numeric. Hence, it must be encoded.
+
+```{r PCA_DataPrep}
+selected_data <- subset(indata_cleaned, select = -c(Major, Men, Women, Sample_size, P25th, P75th, Employed, Unemployed))
+one_hot_encoded <- model.matrix(~ Major_category - 1, data = selected_data)
+numeric_data <- selected_data%>%select_if(is.numeric) 
+
+pca_data <- cbind(numeric_data, one_hot_encoded)
+```
+
+#### Perform Correlation
+
+```{r PCA_Corr}
+cor_matrix <- cor(pca_data)
+```
+
+The correlation matrix is generated with the processed data.   
+Since, it is difficult to go through a matrix of this length, below is a plot that captures the columns that have variance greater than 0.1.
+
+```{r CorrPlot}
+high_variance_data <- pca_data[, apply(pca_data, 2, var) > 0.1]
+high_cor_matrix <- cor(high_variance_data)
+
+par(mar = c(2, 2, 6, 2))
+
+corrplot(high_cor_matrix, method = "circle", 
+         title = "Correlation Heatmap - High Variance Factors",
+         mar = c(0, 0, 5, 0))
+```
+  
+This plot gives us a better understanding of the influence the variables have on one another. Clearly from the plot, we observe multicollinearity.
+
+#### Principal Component Analysis
+
+The Principal Component Analysis is performed after scaling the processed data. The summary and the Scree Plot are generated to understand the principal components better.
+
+```{r PCA}
+# Standardize the data
+scaled_data <- scale(pca_data)
+
+# Perform PCA
+pca <- prcomp(scaled_data, center = TRUE, scale. = TRUE)
+
+# Summary of PCA
+summary(pca)
+
+scree_plot <- qplot(1:length(pca$sdev), pca$sdev^2 / sum(pca$sdev^2),
+                    geom = 'line') +
+  geom_point() +
+  labs(title = "Scree Plot", x = "Principal Components", y = "Proportion of Variance Explained")
+print(scree_plot)
+```  
+From the summary of the PCA and Scree Plot, it is evident that the 90% of the variability is captured by the first 15 components. It is also observed that the components beyond PC22 add almost 0 variability to the dataset.
+
+Based on the principal components generated, it is important to identify the top factors that influence the principal components. Below are the top factors influencing the first 15 components.
+
+```{r PCpredictors}
+loading_matrix <- pca$rotation
+
+important_predictors <- apply(loading_matrix, 2, function(x) names(x[order(-abs(x))][1:3]))
+print(important_predictors[, 1:15])
+```
+#### Identify Principal Components influencing Median Salary 
+
+Linear Regression is performed to identify the principal components that significantly influence Median Salary. After experimenting with several principal component combinations, it was found that PC1, PC2, PC3, PC4, and PC6 appear to have the greatest influence on Median Salary and in obtaining the optimal combination of R-squared value and F-statistic.
+
+```{r LineearRegression}
+# Add PCA scores to the dataset
+pca_scores <- as.data.frame(pca$x)
+pca_scores <- cbind(pca_data$Median, pca_scores)
+colnames(pca_scores)[1] <- "MedianSalary"
+
+# Fit regression model using the first three principal components
+pca_regression <- lm(MedianSalary ~ PC1 + PC2 + PC3 + PC4 + PC6 , data = pca_scores)
+
+# Display regression summary
+summary(pca_regression)
+
+```
+The model has a p-value < 2e-16 indicating that the model is statistically significant. Based on the summary of the model, it can be observed that PC2 and PC4 negatively impact the median salary while PC1, PC3 and PC6 positively impact the median salary.
+
+#### Conclusion
+
+Conclusions for the above analysis can be drawn by studying both the linear regression model summary and the important predictors of principal components. 
+
+The top influencing factors of PC1, PC3, and PC6 are **Total graduates, Part_time Jobs, Low wage jobs, Unemployment_rate, Major_categories - Education, Social Science, Computer & Mathematics, Humanities & Liberal Arts **which in turn positively impact the Median Salary. 
+
+The top influencing factors for PC2 and PC4 are **WomenShare, Rank, Major_categories - Health, Industrial Arts & Consumer Services, Agriculture & Natural Resources** which negatively impact the Median salary of the Graduate.
+
+## Conclusion
+
+The analysis presented thoroughly examines the relationship between earning a bachelor's degree and financial outcomes, using data from FiveThirtyEight based on the American Community Survey (2010-2012). Through this analysis, we have successfully explored various facets of this relationship, including employment rates, salary variations across major categories, and the influence of factors like gender distribution and the relevance of a degree in different job markets.
+
+The core findings of the analysis can be generalized into three key points:  
+1. **Earning Potential Varies Significantly by Major:**  The choice of major has a substantial impact on potential earnings. Fields like Engineering, Computers & Mathematics, Business, and Law & Public Policy consistently demonstrate higher median salaries than others, such as Arts, Education, Humanities & Liberal Arts, and Psychology & Social Work. This suggests that certain fields offer a more favorable return on investment in terms of financial outcomes.  
+2. **Bachelor's Degrees are not Universally Essential, but hold Significant Value in Specific Fields:**  While some industries have a large proportion of jobs that do not necessitate a bachelor's degree, fields like Engineering and Computers & Mathematics exhibit a strong demand for degree holders. This reinforces the notion that a bachelor's degree can be a crucial requirement for accessing higher-paying positions in certain technical and specialized fields.  
+3. **Multiple Factors Influence Salary Outcomes:** By employing statistical techniques like principal component analysis (PCA), and linear regression, factors that contribute to variations in salary are identified. These factors include and are not limited to the total number of graduates in a major, the prevalence of part-time and low-wage jobs within a field, the unemployment rate for specific majors, and the proportion of women in a major. 
+
+Hence, while a bachelor's degree is not a guaranteed path to financial success, it can significantly enhance earning potential, particularly in fields with high demand for skilled graduates. The decision to pursue a bachelor's degree should involve careful consideration of individual career aspirations, the job market dynamics within specific industries, and an understanding of the various factors that can impact salary outcomes.
+
+While the analysis provides great insights into the topic, it is important to note the limitations:  
+1. The dataset used is based on a specific time period (2010-2012), and economic conditions and job market trends can fluctuate over time.   
+2. Further research could explore longitudinal data to understand salary trends and the evolving value of different majors.  
+3. Additionally, the analysis focuses primarily on quantitative data. Conducting qualitative studies, such as interviews with graduates from various fields, could provide valuable insights into the lived experiences and career paths of individuals with different degrees.  
+  
+  
+
